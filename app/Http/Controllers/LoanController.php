@@ -34,7 +34,7 @@ class LoanController extends Controller
                                 config('constants.loanTypes')[0]['type'],
                                 config('constants.loanTypes')[1]['type']
                             ])
-                            ],
+                    ],
             'requested_amount' => [
                         'required',
                         'numeric',
@@ -47,51 +47,59 @@ class LoanController extends Controller
                     config('constants.documentTypes')[1]
                 ])
                 ],
-            'documents.*.id' => ['required', 'integer', 'exists:documents,id,created_by,'.$request->user()->id.'']
+            'documents.*.id' => ['required', 'integer', 'exists:documents,id,created_by,'.$request->user()->id.'']           
         ]);
 
 		if(!$validation->fails()){
-            $applicationNo = Str::random();
+            $existingLoan = Loan::where([
+                'type' => $request->input('type'),
+                'user_id' => $request->user()->id,
+                'status' => 'Applied'])->select(['id'])->first();
+
+            if(!is_object($existingLoan)){
+                $applicationNo = Str::random();
 			
-			DB::beginTransaction();
-                        try {
-                            $loan = Loan::create([
-                                'application_no' => $applicationNo,
-                                'user_id' => $request->user()->id,
-                                'type' => (($request->input('type') == config('constants.loanTypes')[0]['type']))?config('constants.loanTypes')[0]['type']:config('constants.loanTypes')[1]['type'],
-                                'requested_amount' => $request->input('requested_amount'),
-                                'duration' => $request->input('duration'),
-                                'repayment_frequency' => 1, // monthly
-                                'interest_rate' => (($request->input('type') == config('constants.loanTypes')[0]['type']))?config('constants.loanTypesLimit')[0]['PERSONAL']['interest_rate']:config('constants.loanTypesLimit')[0]['BUSINESS']['interest_rate'],
-                                'status' => config('constants.loanStatus')['APPLIED'],
+                DB::beginTransaction();
+                    try {
+                        $loan = Loan::create([
+                            'application_no' => $applicationNo,
+                            'user_id' => $request->user()->id,
+                            'type' => (($request->input('type') == config('constants.loanTypes')[0]['type']))?config('constants.loanTypes')[0]['type']:config('constants.loanTypes')[1]['type'],
+                            'requested_amount' => $request->input('requested_amount'),
+                            'duration' => $request->input('duration'),
+                            'repayment_frequency' => 1, // monthly
+                            'interest_rate' => (($request->input('type') == config('constants.loanTypes')[0]['type']))?config('constants.loanTypesLimit')[0]['PERSONAL']['interest_rate']:config('constants.loanTypesLimit')[0]['BUSINESS']['interest_rate'],
+                            'status' => config('constants.loanStatus')['APPLIED'],
+                            'created_by' => $request->user()->id,
+                            'updated_by' => $request->user()->id
+                        ]);
+                        foreach ($request->input('documents') as $document){
+                            $loanDocuments[] = new LoanDocuments([
+                                'document_id'  => $document['id'],
                                 'created_by' => $request->user()->id,
                                 'updated_by' => $request->user()->id
                             ]);
-                            foreach ($request->input('documents') as $document){
-                                $loanDocuments[] = new LoanDocuments([
-                                    'document_id'  => $document['id'],
-                                    'created_by' => $request->user()->id,
-                                    'updated_by' => $request->user()->id
-                                ]);
-                            }
-                            $loan->loanDocuments()->saveMany($loanDocuments);
-                            $loan->loanLogs()->save(new LoanLogs([
-                                    'action' => 'Loan applied',
-                                    'created_by' => $request->user()->id
-                            ]));
-                            
-                            DB::commit();
-                            return response()->json([
-                                'message' => 'Successfully loan applied!',
-                                'application_no' => $applicationNo
-                            ], 201);
-                            // We can trigger emails/ push notifications to Manager (Loan Department)
-                        } catch (\Exception $e) {
-                            DB::rollback();
-                            return response()->json(["message"=>"Loan is not applied yet. Please try again later!".$e->getMessage()], 422);
                         }
-
-		}
+                        $loan->loanDocuments()->saveMany($loanDocuments);
+                        $loan->loanLogs()->save(new LoanLogs([
+                                'action' => 'Loan applied',
+                                'created_by' => $request->user()->id
+                        ]));
+                        
+                        DB::commit();
+                        return response()->json([
+                            'message' => 'Successfully loan applied!',
+                            'application_no' => $applicationNo
+                        ], 201);
+                        // We can trigger emails/ push notifications to Manager (Loan Department)
+                    } catch (\Exception $e) {
+                        DB::rollback();
+                        return response()->json(["message"=>"Loan is not applied yet. Please try again later!".$e->getMessage()], 422);
+                    }          
+            } else {
+                return response()->json(['loan' => ['Loan for this user already applied!']], 422);
+            }
+           }
 		else{
 			return response()->json($validation->errors(), 422);
 		}
@@ -183,7 +191,8 @@ class LoanController extends Controller
             }
         }
 
-        // To review loan for user
+    
+    // To review loan for user
     public function reviewLoan(Request $request){
         $validation = Validator::make($request->all(),[
             'application_no' => 'required|string|max:100|exists:loans,application_no',
@@ -225,6 +234,8 @@ class LoanController extends Controller
             }
         }
 
+    
+    
     // To reject loan for user
     public function rejectLoan(Request $request){
         $validation = Validator::make($request->all(),[

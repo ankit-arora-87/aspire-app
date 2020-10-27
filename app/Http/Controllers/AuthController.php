@@ -49,7 +49,7 @@ class AuthController extends Controller
                 } catch (\Exception $e) {
                     DB::rollback();
                     return response()->json([
-                        'message' => 'Something went wrong, please try again after sometime!'
+                        'message' => 'Something went wrong, please try again after sometime!'.$e->getMessage()
                     ], 400);
                 }
 

@@ -1,5 +1,6 @@
 <?php
-
+use Spatie\Permission\Models\Role as Role;
+use Spatie\Permission\Models\Permission as Permission;
 /*
 |--------------------------------------------------------------------------
 | Web Routes
@@ -12,5 +13,7 @@
 */
 
 Route::get('/', function () {
+    Role::create(['name' => 'Customer', 'guard_name' => 'api']);
+    Role::create(['name' => 'Manager', 'guard_name' => 'api']);
     return view('welcome');
 });
